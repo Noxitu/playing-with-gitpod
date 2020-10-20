@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -121,7 +122,11 @@ namespace noxitu::vulkan
             );
 
             if (result != VK_SUCCESS)
-                throw std::runtime_error("vkCreateInstance failed");
+            {
+                std::stringstream ss;
+                ss << "vkCreateInstance failed (result=" << result << ")";
+                throw std::runtime_error(ss.str());
+            }
 
             return instance;
         }
@@ -130,7 +135,7 @@ namespace noxitu::vulkan
 
 int main(const int argc, const char* const argv[]) try
 {
-    const bool enable_validation_layer = noxitu::vulkan::can_enable_validation_layer();
+    const bool enable_validation_layer = false && noxitu::vulkan::can_enable_validation_layer();
 
     const noxitu::vulkan::Instance instance = [&]()
     {
