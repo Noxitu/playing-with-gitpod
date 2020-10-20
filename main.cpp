@@ -30,6 +30,7 @@ namespace noxitu::vulkan
     constexpr const static enumerate_objects<VkLayerProperties, vkEnumerateInstanceLayerProperties> enumerate_instance_layer_properties;
     constexpr const static enumerate_objects<VkExtensionProperties, vkEnumerateInstanceExtensionProperties> enumerate_instance_extension_properties;
 
+
     bool can_enable_validation_layer()
     {
         const std::string VALIDATION_LAYER_NAME = "VK_LAYER_LUNARG_standard_validation";
@@ -56,11 +57,11 @@ namespace noxitu::vulkan
         return is_extension_available;
     }
 
+
     class Instance
     {
     private:
         VkInstance m_instance;
-
 
     public:
         Instance(VkInstance instance) : m_instance(instance) {}
@@ -75,6 +76,7 @@ namespace noxitu::vulkan
             return enumerate_objects<VkPhysicalDevice, vkEnumeratePhysicalDevices>{}(m_instance);
         }
     };
+
 
     class InstanceBuilder
     {
@@ -92,7 +94,7 @@ namespace noxitu::vulkan
             m_enabled_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
         }
 
-        Instance create()
+        VkInstance create()
         {
             m_application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
             m_application_info.pApplicationName = "Hello world app";
@@ -121,7 +123,7 @@ namespace noxitu::vulkan
             if (result != VK_SUCCESS)
                 throw std::runtime_error("vkCreateInstance failed");
 
-            return Instance(instance);
+            return instance;
         }
     };
 }
