@@ -1,0 +1,8 @@
+image:
+  file: .gitpod.Dockerfile
+
+vscode:
+  extensions:
+    - ms-vscode.cmake-tools@1.4.2:85XiRZZTNCh6JgvEqefqww==
+    - twxs.cmake@0.0.17:aQNzlYa74rJFJ5/BnUF1yA==
+    - webfreak.debug@0.25.0:F9uLpAOde6r0l7rgMC8LTQ==
