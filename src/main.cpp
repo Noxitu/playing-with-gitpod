@@ -49,6 +49,24 @@ namespace noxitu::vulkan
         }
     };
 
+    class QueuePriorities
+    {
+    private:
+        std::vector<float> m_priorities;
+
+    public:
+        template<typename ...Arg>
+        QueuePriorities(Arg ...values)
+        {
+            m_priorities = {static_cast<float>(values)...};
+        }
+
+        operator const float*() const
+        {
+            return m_priorities.data();
+        }
+    };
+
     class InstanceBuilder
     {
     private:
@@ -98,7 +116,8 @@ namespace noxitu::vulkan
             queueInfos.push_back(vk::DeviceQueueCreateInfo(
                 {},
                 queueFamilyIndex,
-                1
+                1,
+                QueuePriorities(1.0)
             ));
 
             const vk::DeviceCreateInfo info(
