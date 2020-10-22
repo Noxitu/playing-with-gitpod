@@ -37,6 +37,47 @@ namespace noxitu::vulkan
         return is_extension_available;
     }
 
+    template<typename Callback>
+    auto createDebugCallback(const vk::Instance &instance, Callback *callbackPtr)
+    {
+        vk::DebugReportCallbackCreateInfoEXT info(
+            vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning | 
+                vk::DebugReportFlagBitsEXT::eInformation | vk::DebugReportFlagBitsEXT::eDebug,
+            +[](
+                VkDebugReportFlagsEXT flags,
+                VkDebugReportObjectTypeEXT objectType,
+                uint64_t object,
+                size_t location,
+                int32_t messageCode,
+                const char* pLayerPrefix,
+                const char* pMessage, void *userData) -> VkBool32
+            {
+                Callback &callback = *reinterpret_cast<Callback*>(userData);
+                callback();
+                return {};
+            },
+            callbackPtr
+        );
+
+        auto vkCreateDebugReportCallbackEXT = reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(instance.getProcAddr("vkCreateDebugReportCallbackEXT"));
+        
+        if (vkCreateDebugReportCallbackEXT == nullptr) {
+            throw std::runtime_error("Could not load vkCreateDebugReportCallbackEXT");
+        }
+
+        vk::DebugReportCallbackEXT callback;
+        vk::Result result = static_cast<vk::Result>( 
+            vkCreateDebugReportCallbackEXT(
+                instance, 
+                reinterpret_cast<const VkDebugReportCallbackCreateInfoEXT*>(&info),
+                nullptr, 
+                reinterpret_cast<VkDebugReportCallbackEXT*>(&callback)
+            )
+        );
+
+        return createResultValue(result, callback, VULKAN_HPP_NAMESPACE_STRING"::Instance::createDebugReportCallbackEXT");
+    }
+
     class InstanceBuilder
     {
     private:
@@ -86,9 +127,18 @@ int main(const int argc, const char* const argv[]) try
 
         if (enable_validation_layer)
             builder.enable_validation_layer();
+        else
+        {
+            std::cerr << "Validation layer is not available!" << std::endl;
+        };
 
         return builder.create();
     }();
+
+    auto callback = [&](auto ...) {};
+
+    if (enable_validation_layer)
+        noxitu::vulkan::createDebugCallback(instance, &callback);
 
     const auto devices = instance.enumeratePhysicalDevices();
 
