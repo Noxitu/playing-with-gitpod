@@ -1,42 +1,21 @@
-#include <cstdlib>
-#include <stdexcept>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.hpp>
 
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
 namespace noxitu::vulkan
 {
-    template<typename ObjectType, auto FunctionPtr>
-    struct enumerate_objects
-    {
-        template<typename ...Args>
-        std::vector<ObjectType> operator()(Args &&...args) const
-        {
-            uint32_t count;
-            FunctionPtr(std::forward<Args>(args)..., &count, nullptr);
-
-            std::vector<ObjectType> objects(count);
-
-            FunctionPtr(std::forward<Args>(args)..., &count, objects.data());
-
-            return objects;
-        }
-    };
-
-    constexpr const static enumerate_objects<VkLayerProperties, vkEnumerateInstanceLayerProperties> enumerate_instance_layer_properties;
-    constexpr const static enumerate_objects<VkExtensionProperties, vkEnumerateInstanceExtensionProperties> enumerate_instance_extension_properties;
-
 
     bool can_enable_validation_layer()
     {
         const std::string VALIDATION_LAYER_NAME = "VK_LAYER_LUNARG_standard_validation";
 
-        const auto available_layers = enumerate_instance_layer_properties();
+        const auto available_layers = vk::enumerateInstanceLayerProperties();
 
         const bool is_layer_available = std::any_of(
             available_layers.begin(), 
@@ -47,7 +26,7 @@ namespace noxitu::vulkan
         if (!is_layer_available)
             return false;
 
-        const auto available_extensions = enumerate_instance_extension_properties(nullptr);
+        const auto available_extensions = vk::enumerateInstanceExtensionProperties();
 
         const bool is_extension_available = std::any_of(
             available_extensions.begin(), 
@@ -58,75 +37,39 @@ namespace noxitu::vulkan
         return is_extension_available;
     }
 
-
-    class Instance
-    {
-    private:
-        VkInstance m_instance;
-
-    public:
-        Instance(VkInstance instance) : m_instance(instance) {}
-
-        operator VkInstance() const
-        {
-            return m_instance;
-        }
-
-        auto enumerate_phisical_devices() const
-        {
-            return enumerate_objects<VkPhysicalDevice, vkEnumeratePhysicalDevices>{}(m_instance);
-        }
-    };
-
-
     class InstanceBuilder
     {
     private:
-        std::vector<const char*> m_enabled_layers;
-        std::vector<const char*> m_enabled_extensions;
-
-        VkApplicationInfo m_application_info = {};
-        VkInstanceCreateInfo m_create_info = {};
+        std::vector<const char*> m_enabledLayers;
+        std::vector<const char*> m_enabledExtensions;
 
     public:
         void enable_validation_layer()
         {
-            m_enabled_layers.push_back("VK_LAYER_LUNARG_standard_validation");
-            m_enabled_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+            m_enabledLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+            m_enabledExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
         }
 
-        VkInstance create()
+        vk::Instance create()
         {
-            m_application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-            m_application_info.pApplicationName = "Hello world app";
-            m_application_info.applicationVersion = 0;
-            m_application_info.pEngineName = "awesomeengine";
-            m_application_info.engineVersion = 0;
-            m_application_info.apiVersion = VK_API_VERSION_1_0;;
-            
-            m_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-            m_create_info.flags = 0;
-            m_create_info.pApplicationInfo = &m_application_info;
-            
-            m_create_info.enabledLayerCount = m_enabled_layers.size();
-            m_create_info.ppEnabledLayerNames = m_enabled_layers.data();
-            m_create_info.enabledExtensionCount = m_enabled_extensions.size();
-            m_create_info.ppEnabledExtensionNames = m_enabled_extensions.data();
-
-            VkInstance instance;
-
-            VkResult result = vkCreateInstance(
-                    &m_create_info,
-                    NULL,
-                    &instance
+            vk::ApplicationInfo applicationInfo(
+                "Noxitu Vulkan App",
+                0,
+                "noxitu_vulkan_engine",
+                0,
+                VK_API_VERSION_1_0
             );
 
-            if (result != VK_SUCCESS)
-            {
-                std::stringstream ss;
-                ss << "vkCreateInstance failed (result=" << result << ")";
-                throw std::runtime_error(ss.str());
-            }
+            vk::InstanceCreateInfo createInfo(
+                {},
+                &applicationInfo,
+                m_enabledLayers.size(),
+                m_enabledLayers.data(),
+                m_enabledExtensions.size(),
+                m_enabledExtensions.data()
+            );
+            
+            const auto instance = vk::createInstance(createInfo, nullptr);
 
             return instance;
         }
@@ -137,7 +80,7 @@ int main(const int argc, const char* const argv[]) try
 {
     const bool enable_validation_layer = false && noxitu::vulkan::can_enable_validation_layer();
 
-    const noxitu::vulkan::Instance instance = [&]()
+    const auto instance = [&]()
     {
         noxitu::vulkan::InstanceBuilder builder;
 
@@ -147,16 +90,14 @@ int main(const int argc, const char* const argv[]) try
         return builder.create();
     }();
 
-    const auto devices = instance.enumerate_phisical_devices();
+    const auto devices = instance.enumeratePhysicalDevices();
 
     for (auto &device : devices)
     {
-        VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(device, &props);
+        const auto properties = device.getProperties();
 
-        std::cout << " * " << props.deviceName << std::endl;
+        std::cout << " * " << properties.deviceName << std::endl;
     }
-
 
     std::cerr << "main() done" << std::endl;
     return EXIT_SUCCESS;
