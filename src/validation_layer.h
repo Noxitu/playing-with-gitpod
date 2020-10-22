@@ -1,6 +1,9 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
 
+#include <chrono>
+#include <fstream>
+#include <iomanip>
 #include <stdexcept>
 #include <string>
 
@@ -74,4 +77,40 @@ namespace noxitu::vulkan
 
         return createResultValue(result, callback, VULKAN_HPP_NAMESPACE_STRING"::Instance::createDebugReportCallbackEXT");
     }
+
+    class DebugReportCallback
+    {
+    private:
+        using Clock = std::chrono::steady_clock;
+        Clock::time_point m_zeroTimestamp;
+        std::shared_ptr<std::ostream> m_outputStream;
+
+    public:
+        DebugReportCallback(std::ostream &outputStream) :
+            m_zeroTimestamp(Clock::now()),
+            m_outputStream(&outputStream, [](auto){})
+        {}
+
+        DebugReportCallback(std::ofstream &&outputStream) :
+            m_zeroTimestamp(Clock::now()),
+            m_outputStream(std::make_shared<std::ofstream>(std::move(outputStream)))
+        {
+        }
+
+        bool operator()(VkDebugReportFlagsEXT,
+                        VkDebugReportObjectTypeEXT,
+                        uint64_t,
+                        size_t,
+                        int32_t,
+                        const char* layerPrefix,
+                        const char* message) const
+        {
+            const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-m_zeroTimestamp).count();
+            *m_outputStream << '[' << std::setw(6) << timestamp << std::setw(0) << "ms]"
+                            << '[' << layerPrefix << ']'
+                            << ": " << message << std::endl;
+
+            return false;
+        }
+    };
 }

@@ -6,6 +6,7 @@ project(ExampleProject
 )
 
 find_package(Vulkan REQUIRED)
+message("Vulkan_GLSLC_EXECUTABLE = ${Vulkan_GLSLC_EXECUTABLE}")
 
 add_executable(app 
     "src/main.cpp"

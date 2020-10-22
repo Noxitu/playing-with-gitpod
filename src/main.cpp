@@ -3,16 +3,14 @@
 #include <vulkan/vulkan.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
-#include <fstream>
 #include <functional>
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace noxitu::vulkan
@@ -102,7 +100,7 @@ namespace noxitu::vulkan
             return vk::createInstance(createInfo, nullptr);
         }
 
-        std::pair<vk::Device, vk::Queue> createDevice(const vk::PhysicalDevice &physicalDevice)
+        std::tuple<vk::Device, vk::Queue, int> createDevice(const vk::PhysicalDevice &physicalDevice)
         {
             const int queueFamilyIndex = QueueFamilyIndexFinder(physicalDevice).find(
                 [](const vk::QueueFamilyProperties &properties)
@@ -134,9 +132,52 @@ namespace noxitu::vulkan
             const vk::Device device = physicalDevice.createDevice(info);
             const vk::Queue queue = device.getQueue(queueFamilyIndex, 0);
 
-            return {device, queue};
+            return {device, queue, queueFamilyIndex};
         }
     };
+
+    vk::Buffer createBuffer(vk::Device device, int size)
+    {
+        return device.createBuffer(
+            vk::BufferCreateInfo(
+                {},
+                size,
+                vk::BufferUsageFlagBits::eStorageBuffer,
+                vk::SharingMode::eExclusive
+            )
+        );
+    }
+
+    vk::DeviceMemory allocateBuffer(vk::Buffer buffer, vk::PhysicalDevice physicalDevice, vk::Device device)
+    {
+        const vk::PhysicalDeviceMemoryProperties memoryProperties = physicalDevice.getMemoryProperties();
+        vk::MemoryRequirements memoryRequirements = device.getBufferMemoryRequirements(buffer);
+
+        const int memoryTypeIndex = [&]()
+        {
+            const auto requiredTypeMask = memoryRequirements.memoryTypeBits;
+            const auto requiredProperties = (vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+            for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i)
+            {
+                const uint32_t currentTypeMask = (1<<i);
+                const bool hasRequiredType = (currentTypeMask & requiredTypeMask);
+                const bool hasRequiredProperties = ((memoryProperties.memoryTypes[i].propertyFlags & requiredProperties) == requiredProperties);
+
+                if (hasRequiredType && hasRequiredProperties)
+                    return i;
+            }
+
+            throw std::runtime_error("Failed to find memory.");
+        }();
+
+        return device.allocateMemory(
+            vk::MemoryAllocateInfo(
+                memoryRequirements.size,
+                memoryTypeIndex
+            )
+        );
+    }
 }
 
 void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices)
@@ -153,42 +194,6 @@ void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices
     std::cout << std::endl;
 }
 
-class DebugReportCallback
-{
-private:
-    using Clock = std::chrono::steady_clock;
-    Clock::time_point m_zeroTimestamp;
-    std::shared_ptr<std::ostream> m_outputStream;
-
-public:
-    DebugReportCallback(std::ostream &outputStream) :
-        m_zeroTimestamp(Clock::now()),
-        m_outputStream(&outputStream, [](auto){})
-    {}
-
-    DebugReportCallback(std::ofstream &&outputStream) :
-        m_zeroTimestamp(Clock::now()),
-        m_outputStream(std::make_shared<std::ofstream>(std::move(outputStream)))
-    {
-    }
-
-    bool operator()(VkDebugReportFlagsEXT,
-                    VkDebugReportObjectTypeEXT,
-                    uint64_t,
-                    size_t,
-                    int32_t,
-                    const char* layerPrefix,
-                    const char* message) const
-    {
-        const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-m_zeroTimestamp).count();
-        *m_outputStream << '[' << std::setw(6) << timestamp << std::setw(0) << "ms]"
-                        << '[' << layerPrefix << ']'
-                        << ": " << message << std::endl;
-
-        return false;
-    }
-};
-
 int main(const int, const char* const[]) try
 {
     noxitu::vulkan::InstanceBuilder builder;
@@ -203,9 +208,9 @@ int main(const int, const char* const[]) try
     const auto instance = builder.createInstance();
 
 #if __linux__
-    DebugReportCallback debugCallback(std::ofstream("/tmp/vulkan_log.txt"));
+    noxitu::vulkan::DebugReportCallback debugCallback(std::ofstream("/tmp/vulkan_log.txt"));
 #else
-    DebugReportCallback debugCallback(std::cerr);
+    noxitu::vulkan::DebugReportCallback debugCallback(std::cerr);
 #endif
 
     if (enable_validation_layer)
@@ -220,9 +225,20 @@ int main(const int, const char* const[]) try
 
     std::cout << "Using device: " << physicalDevice.getProperties().deviceName << std::endl;
 
-    const auto [device, queue] = builder.createDevice(physicalDevice);
+    const auto [device, queue, queueFamilyIndex] = builder.createDevice(physicalDevice);
+
+    const vk::Buffer buffer = noxitu::vulkan::createBuffer(device, 128*128);
+    const vk::DeviceMemory memory = noxitu::vulkan::allocateBuffer(buffer, physicalDevice, device);
+
+    std::cerr << "destroying" << std::endl;
+
+    device.freeMemory(memory);
+    device.destroyBuffer(buffer);
+    device.destroy();
+    instance.destroy();
 
     std::cerr << "main() done" << std::endl;
+    
     return EXIT_SUCCESS;
 }
 catch(const std::exception &ex)
