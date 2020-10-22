@@ -67,7 +67,21 @@ int main(const int argc, const char* const argv[]) try
         return builder.create();
     }();
 
-    auto callback = [&](auto ...) {};
+    auto callback = [&](
+        VkDebugReportFlagsEXT flags,
+        VkDebugReportObjectTypeEXT objectType,
+        uint64_t object,
+        size_t location,
+        int32_t messageCode,
+        const char* pLayerPrefix,
+        const char* pMessage
+    ) {
+        std::cerr << "Vulkan Debug(layerPrefix=\"" << pLayerPrefix << "\""
+                  << "             message=\"" << pMessage << "\")"
+                  << std::endl;
+
+        return false;
+    };
 
     if (enable_validation_layer)
         noxitu::vulkan::createDebugCallback(instance, &callback);

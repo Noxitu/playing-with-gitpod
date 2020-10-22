@@ -45,11 +45,13 @@ namespace noxitu::vulkan
                 size_t location,
                 int32_t messageCode,
                 const char* pLayerPrefix,
-                const char* pMessage, void *userData) -> VkBool32
+                const char* pMessage,
+                void *userData
+            ) -> VkBool32
             {
                 Callback &callback = *reinterpret_cast<Callback*>(userData);
-                callback();
-                return {};
+                const bool ret = callback(flags, objectType, object, location, messageCode, pLayerPrefix, pMessage);
+                return ret ? VK_TRUE : VK_FALSE;
             },
             callbackPtr
         );
