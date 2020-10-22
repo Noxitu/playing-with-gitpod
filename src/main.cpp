@@ -162,9 +162,9 @@ public:
                     const char* message) const
     {
         const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-m_zeroTimestamp).count();
-        std::cerr << '[' << std::setw(6) << timestamp << std::setw(0) << "ms]"
-                  << '[' << layerPrefix << ']'
-                  << ": " << message << std::endl;
+        *m_outputStream << '[' << std::setw(6) << timestamp << std::setw(0) << "ms]"
+                        << '[' << layerPrefix << ']'
+                        << ": " << message << std::endl;
 
         return false;
     }
