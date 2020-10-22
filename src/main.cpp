@@ -4,12 +4,12 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
 namespace noxitu::vulkan
 {
