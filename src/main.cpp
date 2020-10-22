@@ -3,9 +3,13 @@
 #include <vulkan/vulkan.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -132,7 +136,23 @@ void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices
 
 class DebugReportCallback
 {
+private:
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point m_zeroTimestamp;
+    std::shared_ptr<std::ostream> m_outputStream;
+
 public:
+    DebugReportCallback(std::ostream &outputStream) :
+        m_zeroTimestamp(Clock::now()),
+        m_outputStream(&outputStream, [](auto){})
+    {}
+
+    DebugReportCallback(std::ofstream &&outputStream) :
+        m_zeroTimestamp(Clock::now()),
+        m_outputStream(std::make_shared<std::ofstream>(std::move(outputStream)))
+    {
+    }
+
     bool operator()(VkDebugReportFlagsEXT,
                     VkDebugReportObjectTypeEXT,
                     uint64_t,
@@ -141,9 +161,10 @@ public:
                     const char* layerPrefix,
                     const char* message) const
     {
-        std::cerr << "Vulkan Debug(layerPrefix=\"" << layerPrefix << "\""
-                  << "             message=\"" << message << "\")"
-                  << std::endl;
+        const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-m_zeroTimestamp).count();
+        std::cerr << '[' << std::setw(6) << timestamp << std::setw(0) << "ms]"
+                  << '[' << layerPrefix << ']'
+                  << ": " << message << std::endl;
 
         return false;
     }
@@ -162,7 +183,11 @@ int main(const int, const char* const[]) try
 
     const auto instance = builder.createInstance();
 
-    DebugReportCallback debugCallback;
+#if __linux__
+    DebugReportCallback debugCallback(std::ofstream("/tmp/vulkan_log.txt"));
+#else
+    DebugReportCallback debugCallback(std::cerr);
+#endif
 
     if (enable_validation_layer)
         noxitu::vulkan::createDebugCallback(instance, &debugCallback);
