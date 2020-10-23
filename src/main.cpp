@@ -38,7 +38,8 @@ namespace noxitu::vulkan
     std::tuple<vk::Device, vk::Queue, int> createDevice(const vk::PhysicalDevice &physicalDevice,
                                                         const std::vector<const char *> &enabledLayers)
     {
-        const int queueFamilyIndex = QueueFamilyIndexFinder(physicalDevice).find(
+        const int queueFamilyIndex = noxitu::vulkan::findQueueFamilyIndex(
+            physicalDevice,
             [](const vk::QueueFamilyProperties &properties)
             {
                 return properties.queueCount > 0 && (properties.queueFlags & vk::QueueFlagBits::eCompute);
@@ -86,26 +87,13 @@ namespace noxitu::vulkan
 
     vk::DeviceMemory allocateBuffer(vk::Buffer buffer, vk::PhysicalDevice physicalDevice, vk::Device device)
     {
-        const vk::PhysicalDeviceMemoryProperties memoryProperties = physicalDevice.getMemoryProperties();
-        vk::MemoryRequirements memoryRequirements = device.getBufferMemoryRequirements(buffer);
+        const vk::MemoryRequirements memoryRequirements = device.getBufferMemoryRequirements(buffer);
 
-        const int memoryTypeIndex = [&]()
-        {
-            const auto requiredTypeMask = memoryRequirements.memoryTypeBits;
-            const auto requiredProperties = (vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-            for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i)
-            {
-                const uint32_t currentTypeMask = (1<<i);
-                const bool hasRequiredType = (currentTypeMask & requiredTypeMask);
-                const bool hasRequiredProperties = ((memoryProperties.memoryTypes[i].propertyFlags & requiredProperties) == requiredProperties);
-
-                if (hasRequiredType && hasRequiredProperties)
-                    return i;
-            }
-
-            throw std::runtime_error("Failed to find memory.");
-        }();
+        const int memoryTypeIndex = findMemoryTypeIndex(
+            physicalDevice,
+            memoryRequirements,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
 
         vk::DeviceMemory deviceMemory = device.allocateMemory(
             vk::MemoryAllocateInfo(
@@ -290,13 +278,13 @@ namespace noxitu::vulkan
     }
 
     template<typename Type>
-    std::shared_ptr<span<Type>> mapMemory(vk::Device device, vk::DeviceMemory deviceMemory, int bufferSize)
+    std::shared_ptr<noxitu::span<Type>> mapMemory(vk::Device device, vk::DeviceMemory deviceMemory, int bufferSize)
     {
         void* memory = device.mapMemory(deviceMemory, 0, bufferSize);
 
-        auto spanPtr = std::make_shared<span<Type>>(reinterpret_cast<Type*>(memory), bufferSize/sizeof(Type));
+        auto spanPtr = std::make_shared<noxitu::span<Type>>(reinterpret_cast<Type*>(memory), bufferSize/sizeof(Type));
 
-        return std::shared_ptr<span<Type>>(
+        return std::shared_ptr<noxitu::span<Type>>(
             spanPtr.get(),
             [device, deviceMemory, spanPtr](auto)
             {
@@ -319,7 +307,7 @@ void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices
     std::cerr << noxitu::log(__FILE__, __LINE__) << std::endl;
 }
 
-void saveArray(const char *path, const noxitu::vulkan::span<const float> &array)
+void saveArray(const char *path, const noxitu::span<const float> &array)
 {
     std::ofstream out(path);
     for (auto value : array)

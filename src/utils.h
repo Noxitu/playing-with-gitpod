@@ -5,10 +5,8 @@
 #include <functional>
 #include <vector>
 
-namespace noxitu::vulkan
+namespace noxitu
 {
-    constexpr static const uint64_t INFINITE_TIMEOUT = std::numeric_limits<uint64_t>::max();
-
     template<typename Type>
     class span
     {
@@ -30,7 +28,11 @@ namespace noxitu::vulkan
 
         operator span<const Type>() const { return span<const Type>(m_ptr, m_size); }
     };
+}
 
+namespace noxitu::vulkan
+{
+    constexpr static const uint64_t INFINITE_TIMEOUT = std::numeric_limits<uint64_t>::max();
 
     vk::PhysicalDevice findPhysicalDevice(const std::vector<vk::PhysicalDevice> &physicalDevices,
                                         std::function<bool(const vk::PhysicalDevice&)> condition)
@@ -43,24 +45,36 @@ namespace noxitu::vulkan
         return *it;
     }
 
-    class QueueFamilyIndexFinder
+    int findQueueFamilyIndex(vk::PhysicalDevice physicalDevice,
+                             std::function<bool(const vk::QueueFamilyProperties&)> condition)
     {
-    private:
-        std::vector<vk::QueueFamilyProperties> m_queueFamiliyProperties;
+        const std::vector<vk::QueueFamilyProperties> queueFamiliyProperties = physicalDevice.getQueueFamilyProperties();
 
-    public:
-        QueueFamilyIndexFinder(const vk::PhysicalDevice &physicalDevice) :
-            m_queueFamiliyProperties(physicalDevice.getQueueFamilyProperties())
-        {}
+        auto it = std::find_if(queueFamiliyProperties.begin(), queueFamiliyProperties.end(), condition);
 
-        int find(const std::function<bool(const vk::QueueFamilyProperties&)> &condition) const
+        if (it == queueFamiliyProperties.end())
+            throw std::runtime_error("No valid queue family");
+
+        return std::distance(queueFamiliyProperties.begin(), it);
+    }
+
+    int findMemoryTypeIndex(vk::PhysicalDevice physicalDevice,
+                            vk::MemoryRequirements memoryRequirements,
+                            vk::MemoryPropertyFlags requiredMemoryPropertyFlags)
+    {
+        const vk::PhysicalDeviceMemoryProperties memoryProperties = physicalDevice.getMemoryProperties();
+
+        for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i)
         {
-            auto it = std::find_if(m_queueFamiliyProperties.begin(), m_queueFamiliyProperties.end(), condition);
+            const uint32_t currentTypeBit = (1<<i);
 
-            if (it == m_queueFamiliyProperties.end())
-                throw std::runtime_error("No valid queue family");
+            const bool hasAllowedType = ((memoryRequirements.memoryTypeBits & currentTypeBit) != 0);
+            const bool hasRequiredProperties = ((memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryPropertyFlags) == requiredMemoryPropertyFlags);
 
-            return std::distance(m_queueFamiliyProperties.begin(), it);
+            if (hasAllowedType && hasRequiredProperties)
+                return i;
         }
-    };
+
+        throw std::runtime_error("Failed to find memory type.");
+    }
 }
