@@ -31,10 +31,7 @@ namespace noxitu::logger
 
     using Clock = std::chrono::steady_clock;
     static const Clock::time_point ZERO_TIMESTAMP = Clock::now();
-}
 
-namespace noxitu
-{
     template<typename ...Args>
     logger::LogHeader log(const char *source, int line=-1)
     {
@@ -45,6 +42,11 @@ namespace noxitu
 
         return {timestamp, source, line};
     }
+}
+
+namespace noxitu
+{
+    using noxitu::logger::log;
 
     template<typename Type>
     class span
