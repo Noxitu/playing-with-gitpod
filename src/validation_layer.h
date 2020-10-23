@@ -1,50 +1,11 @@
 #pragma once
+#include "utils.h"
+
 #include <vulkan/vulkan.hpp>
 
-#include <chrono>
 #include <fstream>
-#include <iomanip>
 #include <stdexcept>
 #include <string>
-
-namespace noxitu
-{
-    namespace logger
-    {
-        struct LogHeader
-        {
-            int64_t timestamp;
-            const char *source;
-            int line;
-
-            friend inline std::ostream& operator<< (std::ostream &out, const LogHeader &header)
-            {
-                out << '[' << std::setw(6) << header.timestamp << std::setw(0) << "ms]"
-                    << '[' << header.source; 
-                    
-                if (header.line != -1)
-                    out << ':' << header.line;
-                
-                out << "]: ";
-                return out;
-            }
-        };
-
-        using Clock = std::chrono::steady_clock;
-        static const Clock::time_point ZERO_TIMESTAMP = Clock::now();
-    }
-
-    template<typename ...Args>
-    logger::LogHeader log(const char *source, int line=-1)
-    {
-        using namespace std::chrono;
-        using namespace noxitu::logger;
-
-        const int64_t timestamp = duration_cast<milliseconds>(Clock::now()-ZERO_TIMESTAMP).count();
-
-        return {timestamp, source, line};
-    }
-}
 
 namespace noxitu::vulkan::validation_layer
 {

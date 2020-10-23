@@ -5,12 +5,8 @@
 #include <vulkan/vulkan.hpp>
 
 #include <algorithm>
-#include <climits>
-#include <cstdlib>
-#include <functional>
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -46,7 +42,7 @@ namespace noxitu::vulkan
             }
         );
 
-        std::vector<vk::DeviceQueueCreateInfo> queueInfos = {
+        const std::vector<vk::DeviceQueueCreateInfo> queueInfos = {
             vk::DeviceQueueCreateInfo(
                 {},
                 queueFamilyIndex,
@@ -95,7 +91,7 @@ namespace noxitu::vulkan
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
 
-        vk::DeviceMemory deviceMemory = device.allocateMemory(
+        const vk::DeviceMemory deviceMemory = device.allocateMemory(
             vk::MemoryAllocateInfo(
                 memoryRequirements.size,
                 memoryTypeIndex
@@ -133,7 +129,7 @@ namespace noxitu::vulkan
             vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 1)
         };
 
-        vk::DescriptorPool descriptorPool = device.createDescriptorPool(
+        const vk::DescriptorPool descriptorPool = device.createDescriptorPool(
             vk::DescriptorPoolCreateInfo(
                 {},
                 1,
@@ -142,7 +138,7 @@ namespace noxitu::vulkan
             )
         );
 
-        std::vector<vk::DescriptorSet> descriptorSets = device.allocateDescriptorSets(
+        const std::vector<vk::DescriptorSet> descriptorSets = device.allocateDescriptorSets(
             vk::DescriptorSetAllocateInfo(
                 descriptorPool,
                 descriptorSetLayouts.size(),
@@ -150,7 +146,7 @@ namespace noxitu::vulkan
             )
         );
 
-        vk::DescriptorBufferInfo bufferInfo(
+        const vk::DescriptorBufferInfo bufferInfo(
               buffer,
               0,
               bufferSize
@@ -179,7 +175,7 @@ namespace noxitu::vulkan
 
     std::tuple<vk::Pipeline, vk::PipelineLayout, vk::ShaderModule> createPipeline(vk::Device device, const std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts)
     {
-        vk::ShaderModule shader = device.createShaderModule(
+        const vk::ShaderModule shader = device.createShaderModule(
             vk::ShaderModuleCreateInfo(
                 {},
                 src_shaders_comp_spv_len,
@@ -187,7 +183,7 @@ namespace noxitu::vulkan
             )
         );
 
-        vk::PipelineLayout pipelineLayout = device.createPipelineLayout(
+        const vk::PipelineLayout pipelineLayout = device.createPipelineLayout(
             vk::PipelineLayoutCreateInfo(
                 {},
                 descriptorSetLayouts.size(),
@@ -195,7 +191,7 @@ namespace noxitu::vulkan
             )
         );
 
-        vk::Pipeline pipeline = device.createComputePipeline(
+        const vk::Pipeline pipeline = device.createComputePipeline(
             {},
             vk::ComputePipelineCreateInfo(
                 {},
@@ -218,7 +214,7 @@ namespace noxitu::vulkan
                              const std::vector<vk::DescriptorSet> &descriptorSets,
                              int queueFamilyIndex)
     {
-        vk::CommandPool commandPool = device.createCommandPool(
+        const vk::CommandPool commandPool = device.createCommandPool(
             vk::CommandPoolCreateInfo(
                 {},
                 queueFamilyIndex
@@ -255,7 +251,7 @@ namespace noxitu::vulkan
 
     std::function<void()> submitCommandBuffer(vk::Device device, const std::vector<vk::CommandBuffer> &commandBuffers, vk::Queue queue)
     {
-        vk::Fence fence = device.createFence(vk::FenceCreateInfo());
+        const vk::Fence fence = device.createFence(vk::FenceCreateInfo());
 
         queue.submit(
             {
@@ -315,16 +311,25 @@ void saveArray(const char *path, const noxitu::span<const float> &array)
 }
 
 
-int main(const int, const char* const[]) try
+int main(const int argc, const char* const argv[]) try
 {
+    const std::vector<std::string> args(argv+1, argv+argc);
+
+    const bool enableValidationLayer = (std::find(args.begin(), args.end(), "--nodebug") == args.end());
+
     std::vector<const char*> enabledLayers;
     std::vector<const char*> enabledExtensions;
     
     noxitu::vulkan::validation_layer::ValidationLayer noxituValidationLayer;
 
-    if(!noxituValidationLayer.enable(enabledLayers, enabledExtensions))
+    if (enableValidationLayer)
     {
-        std::cerr << noxitu::log(__FILE__, __LINE__) << "Validation layer is not available!" << std::endl;
+        const bool enabled = noxituValidationLayer.enable(enabledLayers, enabledExtensions);
+
+        if (!enabled)
+        {
+            std::cerr << noxitu::log(__FILE__, __LINE__) << "Validation layer is not available!" << std::endl;
+        }
     }
         
     vk::ApplicationInfo applicationInfo(
@@ -338,6 +343,7 @@ int main(const int, const char* const[]) try
     const vk::Instance instance = noxitu::vulkan::createInstance(applicationInfo, enabledLayers, enabledExtensions);
 
     noxituValidationLayer.addCallback(instance, std::cerr);
+
 #ifdef __linux__
     noxituValidationLayer.addCallback(instance, std::ofstream("/tmp/vulkan_log.txt"), true);
 #endif
