@@ -1,2 +1,5 @@
 /build/
 /.cache/
+
+/3rdparties/*/
+/shaders/*.spv
