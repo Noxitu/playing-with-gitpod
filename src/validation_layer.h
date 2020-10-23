@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace noxitu::vulkan
+namespace noxitu::vulkan::validation_layer
 {
     inline bool canEnableValidationLayer()
     {
@@ -35,22 +35,21 @@ namespace noxitu::vulkan
         return is_extension_available;
     }
 
-    inline void enableValidationLayer(std::vector<const char*> &enabledLayers, std::vector<const char*> &enabledExtensions)
-    {
-        enabledLayers.push_back("VK_LAYER_LUNARG_standard_validation");
-        enabledExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-    }
-
     template<typename Callback>
-    inline auto createDebugCallback(const vk::Instance &instance, Callback *callbackPtr)
+    inline auto createDebugCallback(const vk::Instance &instance, Callback *callbackPtr, bool verbose = false)
     {
+        vk::DebugReportFlagsEXT flags = vk::DebugReportFlagBitsEXT::eError 
+                                      | vk::DebugReportFlagBitsEXT::eWarning 
+                                      | vk::DebugReportFlagBitsEXT::ePerformanceWarning;
+
+        if (verbose)
+        {
+            flags |= vk::DebugReportFlagBitsEXT::eInformation
+                   | vk::DebugReportFlagBitsEXT::eDebug;
+        }
+
         vk::DebugReportCallbackCreateInfoEXT info(
-            vk::DebugReportFlagBitsEXT::eError
-                | vk::DebugReportFlagBitsEXT::eWarning
-                | vk::DebugReportFlagBitsEXT::ePerformanceWarning
-                //| vk::DebugReportFlagBitsEXT::eInformation
-                //| vk::DebugReportFlagBitsEXT::eDebug
-            ,
+            flags,
             +[](
                 VkDebugReportFlagsEXT flags,
                 VkDebugReportObjectTypeEXT objectType,
@@ -132,6 +131,49 @@ namespace noxitu::vulkan
                             << ": " << message << std::endl;
 
             return false;
+        }
+    };
+
+    class ValidationLayer
+    {
+    private:
+        std::vector<std::shared_ptr<void>> m_reporterCallbacks;
+        bool m_enabled = false;
+    
+    public:
+        bool enable(std::vector<const char*> &enabledLayers, std::vector<const char*> &enabledExtensions)
+        {
+            if (canEnableValidationLayer())
+            {
+                enabledLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+                enabledExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+                m_enabled = true;
+            }
+
+            return m_enabled;
+        }
+
+        void addCallback(vk::Instance instance, DebugReportCallback reporterCallback, bool verbose = false)
+        {
+            if (m_enabled)
+            {
+                std::shared_ptr<DebugReportCallback> reporterCallbackPtr = std::make_shared<DebugReportCallback>(std::move(reporterCallback));
+
+                const vk::DebugReportCallbackEXT handle = createDebugCallback(instance, reporterCallbackPtr.get(), verbose);
+
+                m_reporterCallbacks.emplace_back(
+                    reinterpret_cast<void*>(1), // Just any not null pointer.
+                    [handle, instance, ptr=std::move(reporterCallbackPtr)](void*)
+                    {
+                        destroyDebugCallback(instance, handle);
+                    }
+                );
+            }
+        }
+
+        void destroy()
+        {
+            m_reporterCallbacks.clear();
         }
     };
 }

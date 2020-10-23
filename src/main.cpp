@@ -332,33 +332,27 @@ int main(const int, const char* const[]) try
     std::vector<const char*> enabledLayers;
     std::vector<const char*> enabledExtensions;
     
-    const bool enableLalidationLayer = noxitu::vulkan::canEnableValidationLayer();
+    noxitu::vulkan::validation_layer::ValidationLayer noxituValidationLayer;
 
-    if (enableLalidationLayer)
-        noxitu::vulkan::enableValidationLayer(enabledLayers, enabledExtensions);
-    else
+    if(!noxituValidationLayer.enable(enabledLayers, enabledExtensions))
+    {
         std::cerr << "Validation layer is not available!" << std::endl;
-
+    }
+        
     vk::ApplicationInfo applicationInfo(
-        "Noxitu Vulkan App",
-        0,
-        "noxitu_vulkan_engine",
-        0,
+        "Noxitu Application Name",
+        0, // App Version
+        "Noxitu Engine Name",
+        0, // Engine Version
         VK_API_VERSION_1_0
     );
 
     const vk::Instance instance = noxitu::vulkan::createInstance(applicationInfo, enabledLayers, enabledExtensions);
 
-#if __linux__ and 0
-    noxitu::vulkan::DebugReportCallback debugCallback(std::ofstream("/tmp/vulkan_log.txt"));
-#else
-    noxitu::vulkan::DebugReportCallback debugCallback(std::cerr);
+    noxituValidationLayer.addCallback(instance, std::cerr);
+#ifdef __linux__
+    noxituValidationLayer.addCallback(instance, std::ofstream("/tmp/vulkan_log.txt"), true);
 #endif
-
-    vk::DebugReportCallbackEXT debugCallbackEXT;
-
-    if (enableLalidationLayer)
-        debugCallbackEXT = noxitu::vulkan::createDebugCallback(instance, &debugCallback);
 
     const vk::PhysicalDevice physicalDevice = [&]()
     {
@@ -407,13 +401,12 @@ int main(const int, const char* const[]) try
     device.freeMemory(memory);
     device.destroy();
 
-    if (enableLalidationLayer)
-        noxitu::vulkan::destroyDebugCallback(instance, debugCallbackEXT);
-
+    
+    noxituValidationLayer.destroy();
     instance.destroy();
 
     std::cerr << "main() done" << std::endl;
-    
+
     return EXIT_SUCCESS;
 }
 catch(const std::exception &ex)
