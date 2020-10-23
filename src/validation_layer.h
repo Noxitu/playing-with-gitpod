@@ -39,8 +39,12 @@ namespace noxitu::vulkan
     inline auto createDebugCallback(const vk::Instance &instance, Callback *callbackPtr)
     {
         vk::DebugReportCallbackCreateInfoEXT info(
-            vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning | 
-                vk::DebugReportFlagBitsEXT::eInformation | vk::DebugReportFlagBitsEXT::eDebug,
+            vk::DebugReportFlagBitsEXT::eError
+                | vk::DebugReportFlagBitsEXT::eWarning
+                | vk::DebugReportFlagBitsEXT::ePerformanceWarning
+                //| vk::DebugReportFlagBitsEXT::eInformation
+                //| vk::DebugReportFlagBitsEXT::eDebug
+            ,
             +[](
                 VkDebugReportFlagsEXT flags,
                 VkDebugReportObjectTypeEXT objectType,

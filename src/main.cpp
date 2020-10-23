@@ -136,12 +136,12 @@ namespace noxitu::vulkan
         }
     };
 
-    vk::Buffer createBuffer(vk::Device device, int size)
+    vk::Buffer createBuffer(vk::Device device, int bufferSize)
     {
         return device.createBuffer(
             vk::BufferCreateInfo(
                 {},
-                size,
+                bufferSize,
                 vk::BufferUsageFlagBits::eStorageBuffer,
                 vk::SharingMode::eExclusive
             )
@@ -171,12 +171,85 @@ namespace noxitu::vulkan
             throw std::runtime_error("Failed to find memory.");
         }();
 
-        return device.allocateMemory(
+        vk::DeviceMemory deviceMemory = device.allocateMemory(
             vk::MemoryAllocateInfo(
                 memoryRequirements.size,
                 memoryTypeIndex
             )
         );
+
+        device.bindBufferMemory(buffer, deviceMemory, 0);
+
+        return deviceMemory;
+    }
+
+    std::tuple<vk::DescriptorPool, std::vector<vk::DescriptorSetLayout>> createDescriptors(vk::Device device, vk::Buffer buffer, int bufferSize)
+    {
+        const std::vector<vk::DescriptorSetLayoutBinding> descriptorBindigns = {
+            vk::DescriptorSetLayoutBinding(
+                0,
+                vk::DescriptorType::eStorageBuffer,
+                1,
+                vk::ShaderStageFlagBits::eCompute
+            )
+        };
+
+        const std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = {
+            device.createDescriptorSetLayout(
+                vk::DescriptorSetLayoutCreateInfo(
+                    {},
+                    descriptorBindigns.size(),
+                    descriptorBindigns.data()
+                )
+            )
+        };
+
+        const std::vector<vk::DescriptorPoolSize> poolSizes = {
+            vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 1)
+        };
+
+        vk::DescriptorPool descriptorPool = device.createDescriptorPool(
+            vk::DescriptorPoolCreateInfo(
+                {},
+                1,
+                poolSizes.size(),
+                poolSizes.data()
+            )
+        );
+
+        std::vector<vk::DescriptorSet> descriptorSets = device.allocateDescriptorSets(
+            vk::DescriptorSetAllocateInfo(
+                descriptorPool,
+                descriptorSetLayouts.size(),
+                descriptorSetLayouts.data()
+            )
+        );
+
+        vk::DescriptorBufferInfo bufferInfo(
+              buffer,
+              0,
+              bufferSize
+        );
+
+        const std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
+            vk::WriteDescriptorSet(
+                descriptorSets.at(0),
+                0,
+                0,
+                1,
+                vk::DescriptorType::eStorageBuffer,
+                nullptr,
+                &bufferInfo,
+                nullptr
+            )
+        };
+
+        device.updateDescriptorSets(
+            writeDescriptorSets,
+            {}
+        );
+
+        return {descriptorPool, descriptorSetLayouts};
     }
 }
 
@@ -207,7 +280,7 @@ int main(const int, const char* const[]) try
 
     const auto instance = builder.createInstance();
 
-#if __linux__
+#if __linux__ and 0
     noxitu::vulkan::DebugReportCallback debugCallback(std::ofstream("/tmp/vulkan_log.txt"));
 #else
     noxitu::vulkan::DebugReportCallback debugCallback(std::cerr);
@@ -227,13 +300,20 @@ int main(const int, const char* const[]) try
 
     const auto [device, queue, queueFamilyIndex] = builder.createDevice(physicalDevice);
 
-    const vk::Buffer buffer = noxitu::vulkan::createBuffer(device, 128*128);
+    const int bufferSize = 128*128;
+
+    const vk::Buffer buffer = noxitu::vulkan::createBuffer(device, bufferSize);
     const vk::DeviceMemory memory = noxitu::vulkan::allocateBuffer(buffer, physicalDevice, device);
+
+    const auto [descriptorPool, descriptorSetLayouts] = noxitu::vulkan::createDescriptors(device, buffer, bufferSize);
 
     std::cerr << "destroying" << std::endl;
 
-    device.freeMemory(memory);
+    for (const auto &descriptorSetLayout : descriptorSetLayouts)
+        device.destroyDescriptorSetLayout(descriptorSetLayout);
+    device.destroyDescriptorPool(descriptorPool);
     device.destroyBuffer(buffer);
+    device.freeMemory(memory);
     device.destroy();
     instance.destroy();
 
