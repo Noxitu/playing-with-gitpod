@@ -307,16 +307,16 @@ namespace noxitu::vulkan
 
 void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices)
 {
-    std::cout << "Found Physical Devices:\n";
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "Found Physical Devices:\n";
 
     for (const vk::PhysicalDevice &device : physicalDevices)
     {
         const vk::PhysicalDeviceProperties properties = device.getProperties();
 
-        std::cout << " * " << properties.deviceName << '\n';
+        std::cerr << noxitu::log(__FILE__, __LINE__) << " * " << properties.deviceName << '\n';
     }
 
-    std::cout << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << std::endl;
 }
 
 void saveArray(const char *path, const noxitu::vulkan::span<const float> &array)
@@ -336,7 +336,7 @@ int main(const int, const char* const[]) try
 
     if(!noxituValidationLayer.enable(enabledLayers, enabledExtensions))
     {
-        std::cerr << "Validation layer is not available!" << std::endl;
+        std::cerr << noxitu::log(__FILE__, __LINE__) << "Validation layer is not available!" << std::endl;
     }
         
     vk::ApplicationInfo applicationInfo(
@@ -361,7 +361,7 @@ int main(const int, const char* const[]) try
         return noxitu::vulkan::findPhysicalDevice(physicalDevices, [](auto&) {return true;});
     }();
 
-    std::cout << "Using device: " << physicalDevice.getProperties().deviceName << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "Using device: " << physicalDevice.getProperties().deviceName << std::endl;
 
     const auto [device, queue, queueFamilyIndex] = noxitu::vulkan::createDevice(physicalDevice, enabledLayers);
 
@@ -380,12 +380,12 @@ int main(const int, const char* const[]) try
     wait();
 
     {
-        std::cerr << "saving" << std::endl;
+        std::cerr << noxitu::log(__FILE__, __LINE__) << "Saving..." << std::endl;
         const auto memoryView = noxitu::vulkan::mapMemory<float>(device, memory, bufferSize);
         saveArray("/tmp/array.txt", *memoryView);
     }
 
-    std::cerr << "destroying" << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "Destroying..." << std::endl;
 
     device.freeCommandBuffers(commandPool, {commandBuffer});
     device.destroyCommandPool(commandPool);
@@ -405,27 +405,27 @@ int main(const int, const char* const[]) try
     noxituValidationLayer.destroy();
     instance.destroy();
 
-    std::cerr << "main() done" << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "main() done" << std::endl;
 
     return EXIT_SUCCESS;
 }
 catch(const std::exception &ex)
 {
-    std::cerr << "main() failed with exception " << typeid(ex).name() << ": " << ex.what() << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "main() failed with exception " << typeid(ex).name() << ": " << ex.what() << std::endl;
     return EXIT_FAILURE;
 }
 catch(const int ex)
 {
-    std::cerr << "main() failed with int " << ex << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "main() failed with int " << ex << std::endl;
     return EXIT_FAILURE;
 }
 catch(const char *ex)
 {
-    std::cerr << "main() failed with const char*: " << ex << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "main() failed with const char*: " << ex << std::endl;
     return EXIT_FAILURE;
 }
 catch(...)
 {
-    std::cerr << "main() failed" << std::endl;
+    std::cerr << noxitu::log(__FILE__, __LINE__) << "main() failed" << std::endl;
     return EXIT_FAILURE;
 }

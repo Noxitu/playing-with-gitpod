@@ -7,6 +7,45 @@
 #include <stdexcept>
 #include <string>
 
+namespace noxitu
+{
+    namespace logger
+    {
+        struct LogHeader
+        {
+            int64_t timestamp;
+            const char *source;
+            int line;
+
+            friend inline std::ostream& operator<< (std::ostream &out, const LogHeader &header)
+            {
+                out << '[' << std::setw(6) << header.timestamp << std::setw(0) << "ms]"
+                    << '[' << header.source; 
+                    
+                if (header.line != -1)
+                    out << ':' << header.line;
+                
+                out << "]: ";
+                return out;
+            }
+        };
+
+        using Clock = std::chrono::steady_clock;
+        static const Clock::time_point ZERO_TIMESTAMP = Clock::now();
+    }
+
+    template<typename ...Args>
+    logger::LogHeader log(const char *source, int line=-1)
+    {
+        using namespace std::chrono;
+        using namespace noxitu::logger;
+
+        const int64_t timestamp = duration_cast<milliseconds>(Clock::now()-ZERO_TIMESTAMP).count();
+
+        return {timestamp, source, line};
+    }
+}
+
 namespace noxitu::vulkan::validation_layer
 {
     inline bool canEnableValidationLayer()
@@ -101,18 +140,15 @@ namespace noxitu::vulkan::validation_layer
     class DebugReportCallback
     {
     private:
-        using Clock = std::chrono::steady_clock;
-        Clock::time_point m_zeroTimestamp;
+        
         std::shared_ptr<std::ostream> m_outputStream;
 
     public:
         DebugReportCallback(std::ostream &outputStream) :
-            m_zeroTimestamp(Clock::now()),
             m_outputStream(&outputStream, [](auto){})
         {}
 
         DebugReportCallback(std::ofstream &&outputStream) :
-            m_zeroTimestamp(Clock::now()),
             m_outputStream(std::make_shared<std::ofstream>(std::move(outputStream)))
         {
         }
@@ -125,10 +161,8 @@ namespace noxitu::vulkan::validation_layer
                         const char* layerPrefix,
                         const char* message) const
         {
-            const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-m_zeroTimestamp).count();
-            *m_outputStream << '[' << std::setw(6) << timestamp << std::setw(0) << "ms]"
-                            << '[' << layerPrefix << ']'
-                            << ": " << message << std::endl;
+            const std::string source = std::string("Vulkan::") + layerPrefix;
+            *m_outputStream << log(source.c_str()) << message << std::endl;
 
             return false;
         }
