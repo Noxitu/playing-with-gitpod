@@ -9,7 +9,7 @@
 
 namespace noxitu::vulkan
 {
-    inline bool can_enable_validation_layer()
+    inline bool canEnableValidationLayer()
     {
         const std::string VALIDATION_LAYER_NAME = "VK_LAYER_LUNARG_standard_validation";
 
@@ -33,6 +33,12 @@ namespace noxitu::vulkan
         );
 
         return is_extension_available;
+    }
+
+    inline void enableValidationLayer(std::vector<const char*> &enabledLayers, std::vector<const char*> &enabledExtensions)
+    {
+        enabledLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+        enabledExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
     }
 
     template<typename Callback>

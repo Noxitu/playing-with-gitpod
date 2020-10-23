@@ -1,4 +1,5 @@
 #include "shaders/comp.spv.h"
+#include "utils.h"
 #include "validation_layer.h"
 
 #include <vulkan/vulkan.hpp>
@@ -17,150 +18,59 @@
 
 namespace noxitu::vulkan
 {
-    template<typename Type>
-    class span
+    vk::Instance createInstance(const vk::ApplicationInfo &applicationInfo, 
+                                const std::vector<const char *> &enabledLayers,
+                                const std::vector<const char *> &enabledExtensions)
     {
-    private:
-        Type *m_ptr;
-        size_t m_size;
-
-    public:
-        span(Type *ptr, size_t size) : m_ptr(ptr), m_size(size) {}
-
-        Type &operator[](size_t index) { return m_ptr[index]; }
-        const Type &operator[](size_t index) const { return m_ptr[index]; }
-
-        Type* begin() { return m_ptr; }
-        Type* end() { return m_ptr+m_size; }
-
-        const Type* begin() const { return m_ptr; }
-        const Type* end() const { return m_ptr+m_size; }
-
-        operator span<const Type>() const { return span<const Type>(m_ptr, m_size); }
-    };
-
-    constexpr static const uint64_t INFINITE_TIMEOUT = std::numeric_limits<uint64_t>::max();
-
-    vk::PhysicalDevice findPhysicalDevice(const std::vector<vk::PhysicalDevice> &physicalDevices,
-                                        std::function<bool(const vk::PhysicalDevice&)> condition)
-    {
-        auto it = std::find_if(physicalDevices.begin(), physicalDevices.end(), condition);
-
-        if (it == physicalDevices.end())
-            throw std::runtime_error("No physical device found");
-
-        return *it;
-    }
-
-    class QueueFamilyIndexFinder
-    {
-    private:
-        std::vector<vk::QueueFamilyProperties> m_queueFamiliyProperties;
-
-    public:
-        QueueFamilyIndexFinder(const vk::PhysicalDevice &physicalDevice) :
-            m_queueFamiliyProperties(physicalDevice.getQueueFamilyProperties())
-        {}
-
-        int find(const std::function<bool(const vk::QueueFamilyProperties&)> &condition) const
-        {
-            auto it = std::find_if(m_queueFamiliyProperties.begin(), m_queueFamiliyProperties.end(), condition);
-
-            if (it == m_queueFamiliyProperties.end())
-                throw std::runtime_error("No valid queue family");
-
-            return std::distance(m_queueFamiliyProperties.begin(), it);
-        }
-    };
-
-    class QueuePriorities
-    {
-    private:
-        std::vector<float> m_priorities;
-
-    public:
-        template<typename ...Arg>
-        QueuePriorities(Arg ...values)
-        {
-            m_priorities = {static_cast<float>(values)...};
-        }
-
-        operator const float*() const
-        {
-            return m_priorities.data();
-        }
-    };
-
-    class InstanceBuilder
-    {
-    private:
-        std::vector<const char*> m_enabledLayers;
-        std::vector<const char*> m_enabledExtensions;
-
-    public:
-        void enable_validation_layer()
-        {
-            m_enabledLayers.push_back("VK_LAYER_LUNARG_standard_validation");
-            m_enabledExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        }
-
-        vk::Instance createInstance()
-        {
-            vk::ApplicationInfo applicationInfo(
-                "Noxitu Vulkan App",
-                0,
-                "noxitu_vulkan_engine",
-                0,
-                VK_API_VERSION_1_0
-            );
-
-            vk::InstanceCreateInfo createInfo(
+        return vk::createInstance(
+            vk::InstanceCreateInfo(
                 {},
                 &applicationInfo,
-                m_enabledLayers.size(),
-                m_enabledLayers.data(),
-                m_enabledExtensions.size(),
-                m_enabledExtensions.data()
-            );
-            
-            return vk::createInstance(createInfo, nullptr);
-        }
+                enabledLayers.size(),
+                enabledLayers.data(),
+                enabledExtensions.size(),
+                enabledExtensions.data()
+            ),
+            nullptr
+        );
+    }
 
-        std::tuple<vk::Device, vk::Queue, int> createDevice(const vk::PhysicalDevice &physicalDevice)
-        {
-            const int queueFamilyIndex = QueueFamilyIndexFinder(physicalDevice).find(
-                [](const vk::QueueFamilyProperties &properties)
-                {
-                    return properties.queueCount > 0 && (properties.queueFlags & vk::QueueFlagBits::eCompute);
-                }
-            );
+    std::tuple<vk::Device, vk::Queue, int> createDevice(const vk::PhysicalDevice &physicalDevice,
+                                                        const std::vector<const char *> &enabledLayers)
+    {
+        const int queueFamilyIndex = QueueFamilyIndexFinder(physicalDevice).find(
+            [](const vk::QueueFamilyProperties &properties)
+            {
+                return properties.queueCount > 0 && (properties.queueFlags & vk::QueueFlagBits::eCompute);
+            }
+        );
 
-            std::vector<vk::DeviceQueueCreateInfo> queueInfos;
-
-            queueInfos.push_back(vk::DeviceQueueCreateInfo(
+        std::vector<vk::DeviceQueueCreateInfo> queueInfos = {
+            vk::DeviceQueueCreateInfo(
                 {},
                 queueFamilyIndex,
                 1,
-                QueuePriorities(1.0)
-            ));
+                std::vector<float>{1.0f}.data()
+            )
+        };
 
-            const vk::DeviceCreateInfo info(
+        const vk::Device device = physicalDevice.createDevice(
+            vk::DeviceCreateInfo(
                 {},
                 queueInfos.size(),
                 queueInfos.data(),
-                m_enabledLayers.size(),
-                m_enabledLayers.data(),
+                enabledLayers.size(),
+                enabledLayers.data(),
                 0,
                 nullptr,
                 nullptr
-            );
+            )
+        );
 
-            const vk::Device device = physicalDevice.createDevice(info);
-            const vk::Queue queue = device.getQueue(queueFamilyIndex, 0);
+        const vk::Queue queue = device.getQueue(queueFamilyIndex, 0);
 
-            return {device, queue, queueFamilyIndex};
-        }
-    };
+        return {device, queue, queueFamilyIndex};
+    }
 
     vk::Buffer createBuffer(vk::Device device, int bufferSize)
     {
@@ -419,16 +329,25 @@ void saveArray(const char *path, const noxitu::vulkan::span<const float> &array)
 
 int main(const int, const char* const[]) try
 {
-    noxitu::vulkan::InstanceBuilder builder;
+    std::vector<const char*> enabledLayers;
+    std::vector<const char*> enabledExtensions;
     
-    const bool enable_validation_layer = noxitu::vulkan::can_enable_validation_layer();
+    const bool enableLalidationLayer = noxitu::vulkan::canEnableValidationLayer();
 
-    if (enable_validation_layer)
-        builder.enable_validation_layer();
+    if (enableLalidationLayer)
+        noxitu::vulkan::enableValidationLayer(enabledLayers, enabledExtensions);
     else
         std::cerr << "Validation layer is not available!" << std::endl;
 
-    const auto instance = builder.createInstance();
+    vk::ApplicationInfo applicationInfo(
+        "Noxitu Vulkan App",
+        0,
+        "noxitu_vulkan_engine",
+        0,
+        VK_API_VERSION_1_0
+    );
+
+    const vk::Instance instance = noxitu::vulkan::createInstance(applicationInfo, enabledLayers, enabledExtensions);
 
 #if __linux__ and 0
     noxitu::vulkan::DebugReportCallback debugCallback(std::ofstream("/tmp/vulkan_log.txt"));
@@ -438,7 +357,7 @@ int main(const int, const char* const[]) try
 
     vk::DebugReportCallbackEXT debugCallbackEXT;
 
-    if (enable_validation_layer)
+    if (enableLalidationLayer)
         debugCallbackEXT = noxitu::vulkan::createDebugCallback(instance, &debugCallback);
 
     const vk::PhysicalDevice physicalDevice = [&]()
@@ -450,7 +369,7 @@ int main(const int, const char* const[]) try
 
     std::cout << "Using device: " << physicalDevice.getProperties().deviceName << std::endl;
 
-    const auto [device, queue, queueFamilyIndex] = builder.createDevice(physicalDevice);
+    const auto [device, queue, queueFamilyIndex] = noxitu::vulkan::createDevice(physicalDevice, enabledLayers);
 
     const int bufferSize = 4*sizeof(float)*128*128;
 
@@ -488,7 +407,7 @@ int main(const int, const char* const[]) try
     device.freeMemory(memory);
     device.destroy();
 
-    if (enable_validation_layer)
+    if (enableLalidationLayer)
         noxitu::vulkan::destroyDebugCallback(instance, debugCallbackEXT);
 
     instance.destroy();
