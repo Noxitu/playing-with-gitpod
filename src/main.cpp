@@ -17,6 +17,28 @@
 
 namespace noxitu::vulkan
 {
+    template<typename Type>
+    class span
+    {
+    private:
+        Type *m_ptr;
+        size_t m_size;
+
+    public:
+        span(Type *ptr, size_t size) : m_ptr(ptr), m_size(size) {}
+
+        Type &operator[](size_t index) { return m_ptr[index]; }
+        const Type &operator[](size_t index) const { return m_ptr[index]; }
+
+        Type* begin() { return m_ptr; }
+        Type* end() { return m_ptr+m_size; }
+
+        const Type* begin() const { return m_ptr; }
+        const Type* end() const { return m_ptr+m_size; }
+
+        operator span<const Type>() const { return span<const Type>(m_ptr, m_size); }
+    };
+
     constexpr static const uint64_t INFINITE_TIMEOUT = std::numeric_limits<uint64_t>::max();
 
     vk::PhysicalDevice findPhysicalDevice(const std::vector<vk::PhysicalDevice> &physicalDevices,
@@ -350,11 +372,26 @@ namespace noxitu::vulkan
             fence
         );
 
-        return [&device, fence=fence]()
+        return [device, fence=fence]()
         {
             device.waitForFences({fence}, VK_TRUE, INFINITE_TIMEOUT);
             device.destroyFence(fence);
         };
+    }
+
+    template<typename Type>
+    std::shared_ptr<span<Type>> mapMemory(vk::Device device, vk::DeviceMemory deviceMemory, int bufferSize)
+    {
+        void* memory = device.mapMemory(deviceMemory, 0, bufferSize);
+
+        auto spanPtr = std::make_shared<span<Type>>(reinterpret_cast<Type*>(memory), bufferSize/sizeof(Type));
+
+        return std::shared_ptr<span<Type>>(
+            spanPtr.get(),
+            [device, deviceMemory, spanPtr](auto)
+            {
+                device.unmapMemory(deviceMemory);
+            });
     }
 }
 
@@ -371,6 +408,14 @@ void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices
 
     std::cout << std::endl;
 }
+
+void saveArray(const char *path, const noxitu::vulkan::span<const float> &array)
+{
+    std::ofstream out(path);
+    for (auto value : array)
+        out << value << ' ';
+}
+
 
 int main(const int, const char* const[]) try
 {
@@ -391,8 +436,10 @@ int main(const int, const char* const[]) try
     noxitu::vulkan::DebugReportCallback debugCallback(std::cerr);
 #endif
 
+    vk::DebugReportCallbackEXT debugCallbackEXT;
+
     if (enable_validation_layer)
-        noxitu::vulkan::createDebugCallback(instance, &debugCallback);
+        debugCallbackEXT = noxitu::vulkan::createDebugCallback(instance, &debugCallback);
 
     const vk::PhysicalDevice physicalDevice = [&]()
     {
@@ -405,7 +452,7 @@ int main(const int, const char* const[]) try
 
     const auto [device, queue, queueFamilyIndex] = builder.createDevice(physicalDevice);
 
-    const int bufferSize = 128*128;
+    const int bufferSize = 4*sizeof(float)*128*128;
 
     const vk::Buffer buffer = noxitu::vulkan::createBuffer(device, bufferSize);
     const vk::DeviceMemory memory = noxitu::vulkan::allocateBuffer(buffer, physicalDevice, device);
@@ -418,6 +465,12 @@ int main(const int, const char* const[]) try
 
     const auto wait = noxitu::vulkan::submitCommandBuffer(device, {commandBuffer}, queue);
     wait();
+
+    {
+        std::cerr << "saving" << std::endl;
+        const auto memoryView = noxitu::vulkan::mapMemory<float>(device, memory, bufferSize);
+        saveArray("/tmp/array.txt", *memoryView);
+    }
 
     std::cerr << "destroying" << std::endl;
 
@@ -434,6 +487,10 @@ int main(const int, const char* const[]) try
     device.destroyBuffer(buffer);
     device.freeMemory(memory);
     device.destroy();
+
+    if (enable_validation_layer)
+        noxitu::vulkan::destroyDebugCallback(instance, debugCallbackEXT);
+
     instance.destroy();
 
     std::cerr << "main() done" << std::endl;

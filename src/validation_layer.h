@@ -82,6 +82,17 @@ namespace noxitu::vulkan
         return createResultValue(result, callback, VULKAN_HPP_NAMESPACE_STRING"::Instance::createDebugReportCallbackEXT");
     }
 
+    void destroyDebugCallback(vk::Instance instance, vk::DebugReportCallbackEXT callback)
+    {
+        auto vkDestroyDebugReportCallbackEXT = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(instance.getProcAddr("vkDestroyDebugReportCallbackEXT"));
+        
+        if (vkDestroyDebugReportCallbackEXT == nullptr) {
+            throw std::runtime_error("Could not load vkDestroyDebugReportCallbackEXT");
+        }
+
+        vkDestroyDebugReportCallbackEXT(instance, callback, nullptr);
+    }
+
     class DebugReportCallback
     {
     private:
