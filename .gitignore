@@ -2,4 +2,5 @@
 /.cache/
 
 /3rdparties/*/
-/shaders/*.spv
+**/shaders/*.spv
+**/shaders/*.spv.h

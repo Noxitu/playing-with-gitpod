@@ -1,3 +1,4 @@
+#include "shaders/comp.spv.h"
 #include "validation_layer.h"
 
 #include <vulkan/vulkan.hpp>
@@ -251,6 +252,41 @@ namespace noxitu::vulkan
 
         return {descriptorPool, descriptorSetLayouts};
     }
+
+    std::tuple<vk::Pipeline, vk::PipelineLayout, vk::ShaderModule> createPipeline(vk::Device device, const std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts)
+    {
+        vk::ShaderModule shader = device.createShaderModule(
+            vk::ShaderModuleCreateInfo(
+                {},
+                src_shaders_comp_spv_len,
+                reinterpret_cast<uint32_t*>(src_shaders_comp_spv)
+            )
+        );
+
+        vk::PipelineLayout pipelineLayout = device.createPipelineLayout(
+            vk::PipelineLayoutCreateInfo(
+                {},
+                descriptorSetLayouts.size(),
+                descriptorSetLayouts.data()
+            )
+        );
+
+        vk::Pipeline pipeline = device.createComputePipeline(
+            {},
+            vk::ComputePipelineCreateInfo(
+                {},
+                vk::PipelineShaderStageCreateInfo(
+                    {},
+                    vk::ShaderStageFlagBits::eCompute,
+                    shader,
+                    "main"
+                ),
+                pipelineLayout
+            )
+        );
+
+        return {pipeline, pipelineLayout, shader};
+    }
 }
 
 void printPhysicalDevices(const std::vector<vk::PhysicalDevice> &physicalDevices)
@@ -307,8 +343,14 @@ int main(const int, const char* const[]) try
 
     const auto [descriptorPool, descriptorSetLayouts] = noxitu::vulkan::createDescriptors(device, buffer, bufferSize);
 
+    const auto [pipeline, pipelineLayout, shaderModule] = noxitu::vulkan::createPipeline(device, descriptorSetLayouts);
+
     std::cerr << "destroying" << std::endl;
 
+    device.destroyShaderModule(shaderModule);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyPipeline(pipeline);
+    
     for (const auto &descriptorSetLayout : descriptorSetLayouts)
         device.destroyDescriptorSetLayout(descriptorSetLayout);
     device.destroyDescriptorPool(descriptorPool);
