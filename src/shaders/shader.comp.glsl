@@ -16,5 +16,9 @@ void main()
     if(gl_GlobalInvocationID.x >= 128 || gl_GlobalInvocationID.y >= 128)
         return;
 
-    pixels[128 * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = vec4(0, 0.25, 0.5, 1);
+    pixels[128 * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = vec4(
+        gl_GlobalInvocationID.x,
+        gl_GlobalInvocationID.y,
+        gl_GlobalInvocationID.z,
+        pixels[128 * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x]);
 }

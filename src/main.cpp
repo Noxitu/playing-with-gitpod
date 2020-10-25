@@ -103,27 +103,84 @@ namespace noxitu::vulkan
         return deviceMemory;
     }
 
-    std::tuple<vk::DescriptorPool, std::vector<vk::DescriptorSet>, std::vector<vk::DescriptorSetLayout>> 
-    createDescriptors(vk::Device device, vk::Buffer buffer, int bufferSize)
+    class MyComputePipeline
     {
-        const std::vector<vk::DescriptorSetLayoutBinding> descriptorBindigns = {
-            vk::DescriptorSetLayoutBinding(
-                0,
-                vk::DescriptorType::eStorageBuffer,
-                1,
-                vk::ShaderStageFlagBits::eCompute
-            )
-        };
+    public:
+        std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+        vk::PipelineLayout pipelineLayout;
+        vk::ShaderModule shader;
+        vk::Pipeline pipeline;
 
-        const std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = {
-            device.createDescriptorSetLayout(
-                vk::DescriptorSetLayoutCreateInfo(
-                    {},
-                    descriptorBindigns.size(),
-                    descriptorBindigns.data()
+        MyComputePipeline(const vk::Device device)
+        {
+            const std::vector<vk::DescriptorSetLayoutBinding> descriptorBindigns = {
+                vk::DescriptorSetLayoutBinding(
+                    0,
+                    vk::DescriptorType::eStorageBuffer,
+                    1,
+                    vk::ShaderStageFlagBits::eCompute
                 )
-            )
-        };
+            };
+
+            descriptorSetLayouts = {
+                device.createDescriptorSetLayout(
+                    vk::DescriptorSetLayoutCreateInfo(
+                        {},
+                        descriptorBindigns.size(),
+                        descriptorBindigns.data()
+                    )
+                )
+            };
+            
+            pipelineLayout = device.createPipelineLayout(
+                vk::PipelineLayoutCreateInfo(
+                    {},
+                    descriptorSetLayouts.size(),
+                    descriptorSetLayouts.data()
+                )
+            );
+
+            shader = device.createShaderModule(
+                vk::ShaderModuleCreateInfo(
+                    {},
+                    src_shaders_comp_spv_len,
+                    reinterpret_cast<uint32_t*>(src_shaders_comp_spv)
+                )
+            );
+
+            pipeline = device.createComputePipeline(
+                {},
+                vk::ComputePipelineCreateInfo(
+                    {},
+                    vk::PipelineShaderStageCreateInfo(
+                        {},
+                        vk::ShaderStageFlagBits::eCompute,
+                        shader,
+                        "main"
+                    ),
+                    pipelineLayout
+                )
+            );
+        }
+
+        void destroy(const vk::Device device) const
+        {
+            device.destroy(pipeline);
+
+            device.destroy(pipelineLayout);
+            device.destroy(shader);
+
+            for (auto &descriptorSetLayout : descriptorSetLayouts)
+                device.destroy(descriptorSetLayout);
+        }
+    };
+
+    std::tuple<vk::DescriptorPool, std::vector<vk::DescriptorSet>> 
+    createDescriptors(vk::Device device,
+                      vk::Buffer buffer,
+                      const std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
+                      int bufferSize)
+    {
 
         const std::vector<vk::DescriptorPoolSize> poolSizes = {
             vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 1)
@@ -170,42 +227,7 @@ namespace noxitu::vulkan
             {}
         );
 
-        return {descriptorPool, descriptorSets, descriptorSetLayouts};
-    }
-
-    std::tuple<vk::Pipeline, vk::PipelineLayout, vk::ShaderModule> createPipeline(vk::Device device, const std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts)
-    {
-        const vk::ShaderModule shader = device.createShaderModule(
-            vk::ShaderModuleCreateInfo(
-                {},
-                src_shaders_comp_spv_len,
-                reinterpret_cast<uint32_t*>(src_shaders_comp_spv)
-            )
-        );
-
-        const vk::PipelineLayout pipelineLayout = device.createPipelineLayout(
-            vk::PipelineLayoutCreateInfo(
-                {},
-                descriptorSetLayouts.size(),
-                descriptorSetLayouts.data()
-            )
-        );
-
-        const vk::Pipeline pipeline = device.createComputePipeline(
-            {},
-            vk::ComputePipelineCreateInfo(
-                {},
-                vk::PipelineShaderStageCreateInfo(
-                    {},
-                    vk::ShaderStageFlagBits::eCompute,
-                    shader,
-                    "main"
-                ),
-                pipelineLayout
-            )
-        );
-
-        return {pipeline, pipelineLayout, shader};
+        return {descriptorPool, descriptorSets};
     }
 
     std::tuple<vk::CommandPool, vk::CommandBuffer> createCommandBuffer(vk::Device device,
@@ -359,16 +381,16 @@ int main(const int argc, const char* const argv[]) try
 
     const auto [device, queue, queueFamilyIndex] = noxitu::vulkan::createDevice(physicalDevice, enabledLayers);
 
+    const noxitu::vulkan::MyComputePipeline myPipeline(device);
+
     const int bufferSize = 4*sizeof(float)*128*128;
 
     const vk::Buffer buffer = noxitu::vulkan::createBuffer(device, bufferSize);
     const vk::DeviceMemory memory = noxitu::vulkan::allocateBuffer(buffer, physicalDevice, device);
 
-    const auto [descriptorPool, descriptorSets, descriptorSetLayouts] = noxitu::vulkan::createDescriptors(device, buffer, bufferSize);
+    const auto [descriptorPool, descriptorSets] = noxitu::vulkan::createDescriptors(device, buffer, myPipeline.descriptorSetLayouts, bufferSize);
 
-    const auto [pipeline, pipelineLayout, shaderModule] = noxitu::vulkan::createPipeline(device, descriptorSetLayouts);
-
-    const auto [commandPool, commandBuffer] = noxitu::vulkan::createCommandBuffer(device, pipeline, pipelineLayout, descriptorSets, queueFamilyIndex);
+    const auto [commandPool, commandBuffer] = noxitu::vulkan::createCommandBuffer(device, myPipeline.pipeline, myPipeline.pipelineLayout, descriptorSets, queueFamilyIndex);
 
     const auto wait = noxitu::vulkan::submitCommandBuffer(device, {commandBuffer}, queue);
     wait();
@@ -384,12 +406,8 @@ int main(const int argc, const char* const argv[]) try
     device.freeCommandBuffers(commandPool, {commandBuffer});
     device.destroyCommandPool(commandPool);
 
-    device.destroyShaderModule(shaderModule);
-    device.destroyPipelineLayout(pipelineLayout);
-    device.destroyPipeline(pipeline);
+    myPipeline.destroy(device);
 
-    for (const auto &descriptorSetLayout : descriptorSetLayouts)
-        device.destroyDescriptorSetLayout(descriptorSetLayout);
     device.destroyDescriptorPool(descriptorPool);
     device.destroyBuffer(buffer);
     device.freeMemory(memory);
